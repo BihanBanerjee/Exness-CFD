@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url      = env("DATABASE_URL")
+}
+
+enum Asset {
+  BTCUSDT
+  ETHUSDT
+  SOLUSDT
+}
+
+enum OrderType {
+  LONG
+  SHORT
+}
+
+
+model User {
+  id        String        @id @default(uuid())
+  email     String        @unique
+  phone     Int           @unique
+  password  String
+}
+
+
+model ClosedOrder {
+  orderId         String        @id
+  userId          String
+  asset           Asset
+  orderType       OrderType
+  leverage        Int
+  marginInt       BigInt
+  executionPoint  BigInt
+  closePriceInt   BigInt
+  qtyInt          BigInt
+  stopLossInt     BigInt
+  takeProfitInt   BigInt
+  finalPnLInt     BigInt
+  createdAt       DateTime
+  closedAt        DateTime
+
+  @@index([userId, closedAt])
+  @@index([closedAt])
+  @@index([asset])
+  @@map("closed_orders")
+}

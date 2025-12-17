@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    restart: always
+    ports:
+      - "5433:5432" 
+      # Mapping to the local machine's 5433 port instead of 5432 port as we have the older exness app running.
+    environment:
+      POSTGRES_DB: trading_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6380:6379"
+      # Mapping to the local machine's 6380 port instead of 6379 port as we have the older exness app running.
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+volumes:
+  timescale_data:
+  redis_data:
