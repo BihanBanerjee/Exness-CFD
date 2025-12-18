@@ -1,7 +1,7 @@
 import redisClient from "@exness/redis-client";
 import WebSocket from "ws";
 import { BATCH_UPLOADER_STREAM } from "./config";
-
+import { STREAMS, createPriceUpdate, serializeForStream } from "@exness/redis-stream-types";
 
 const SUPPORTED_PAIRS = ["btcusdt", "solusdt", "ethusdt"];
 
@@ -55,6 +55,28 @@ async function main () {
                 priceInt,
                 payload.T
             );
+
+            // Stream MANIPULATED prices to REQUEST stream for liquidation engine.
+            await redisClient.xadd(
+                STREAMS.REQUEST,
+                "*",
+                "type",
+                priceUpdateMessage.type,
+                "timestamp",
+                priceUpdateMessage.timestamp.toString(),
+                "payload",
+                serializeForStream(priceUpdateMessage.payload)
+            );
+            console.log(`Streamed price update to ${STREAMS.REQUEST}: ${payload.s}`);
+
+            // Stream HONEST prices for database storage (candleatick charts)
+            await redisClient.xadd(
+                BATCH_UPLOADER_STREAM,
+                "*",
+                "data",
+                JSON.stringify(honesPriceData)
+            );
+            console.log(`Added honest prices to Redis stream: ${BATCH_UPLOADER_STREAM}`);
                         
         } catch (error) {
             console.error("Error processing message: ", error);
@@ -66,4 +88,4 @@ async function main () {
     }
 }
 
-main()
+main();

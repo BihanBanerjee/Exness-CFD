@@ -25,6 +25,12 @@ enum OrderType {
   SHORT
 }
 
+enum OrderStatus {
+  OPEN
+  CLOSED
+  LIQUIDATED
+}
+
 
 model User {
   id        String        @id @default(uuid())

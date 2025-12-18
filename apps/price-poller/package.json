@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@exness/redis-client": "*",
+    "@exness/redis-stream-types": "*",
     "ws": "^8.18.3"
   }
 }

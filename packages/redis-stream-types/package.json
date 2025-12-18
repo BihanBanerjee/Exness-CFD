@@ -1,12 +1,15 @@
 {
-  "name": "redis-stream-types",
+  "name": "@exness/redis-stream-types",
   "module": "index.ts",
-  "type": "module",
-  "private": true,
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
-  }
+  },
+  "dependencies": {
+    "@exness/prisma-client": "*"
+  },
+  "private": true,
+  "type": "module"
 }

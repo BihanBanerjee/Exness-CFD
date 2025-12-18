@@ -1,5 +1,5 @@
 {
-  "name": "prisma-client",
+  "name": "@exness/prisma-client",
   "module": "index.ts",
   "type": "module",
   "private": true,
