@@ -14,9 +14,11 @@ export const STREAMS = {
     BATCH_UPLOADER: "batch:uploader:stream",
 } as const;
 
+
 // ------------------ Message Types -------------------
+
 export type MessageType = 
-|  "PRICE_UPDATE" 
+| "PRICE_UPDATE" 
 | "REGISTER_USER"
 | "PLACE_ORDER"
 | "CLOSE_ORDER"
@@ -35,20 +37,11 @@ export interface BaseStreamMessage<T = any> {
     payload: T
 }
 
-export interface StreamRequest<T = any> extends BaseStreamMessage<T>{
+export interface StreamRequest<T = any> extends BaseStreamMessage<T>{ // StreamRequest is the structure for requests sent FROM the HTTP-Server TO the liquidation engine.
     requestId: string;
     type: RequestType;
     userId: string; 
 }
-
-export interface StreamResponse<T = any> {
-    requestId: string;
-    success: boolean;
-    timestamp: number;
-    data?: T;
-    error?: string;
-}
-
 
 export interface StreamResponse<T = any> {
     requestId: string;
@@ -86,6 +79,20 @@ export interface PriceUpdatePayload {
     timestamp: number // Unix timestamp in ms
 }
 
+// ------------------------- Request Payloads ---------------------------------
+export interface SignupUserPayload {
+    initialBalanceInt: bigint; // Initial dummy balance (e.g., 100000000000 = 1000 USD)
+}
+
+// --------------------------- Response Data ------------------------------------
+export interface BalanceData {
+    balanceInt: bigint;
+    userId: string;
+}
+
+export interface signupUserResponseData {
+    balance: BalanceData
+}
 
 // ------------------- Utility Functions -------------------------------
 
@@ -116,6 +123,22 @@ export function createPriceUpdate(
     }
 }
 
+/**
+ * Create a typed request 
+ */
+export function createRequest<T>(
+    type: RequestType,
+    userId: string,
+    payload: T
+): StreamRequest<T> {
+    return {
+        requestId: generateRequestId(),
+        type,
+        userId,
+        timestamp: Date.now(),
+        payload
+    }
+}
 
 /**
  * Serialize BigInt values for JSON transmission
@@ -142,4 +165,6 @@ export function deserializeFromStream (json: string): any {
         return value;
     })
 }
+
+
 

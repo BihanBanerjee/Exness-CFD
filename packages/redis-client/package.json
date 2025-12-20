@@ -10,6 +10,12 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "ioredis": "^5.8.2"
+    "ioredis": "^5.8.2",
+    "@exness/redis-stream-types": "*"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./stream": "./stream.ts",
+    "./subscriber": "./subscriber.ts"
   }
 }
