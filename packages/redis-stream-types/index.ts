@@ -14,6 +14,23 @@ export const STREAMS = {
     BATCH_UPLOADER: "batch:uploader:stream",
 } as const;
 
+// --------------------------- Engine Status ----------------------------
+
+export const ENGINE_STATUS_KEY = "engine:status";
+
+export enum EngineStatus {
+    STARTING = "STARTING",
+    REPLAYING = "REPLAYING",
+    READY = "READY",
+    SHUTDOWN = "SHUTDOWN",
+}
+
+export interface EngineStatusData {
+    status: EngineStatus;
+    timestamp: number;
+    message?: string;
+}
+
 
 // ------------------ Message Types -------------------
 
@@ -65,7 +82,9 @@ export interface PriceUpdateMessage extends BaseStreamMessage<PriceUpdatePayload
 // ------------------------ Message Payloads -------------------------------
 export interface PriceUpdatePayload {
     symbol: string; // e.g., "BTCUSDT"
-    priceInt: bigint; // Manipulated price as integer (price * 100,000,000)
+    bidPriceInt: bigint; // Bid price as integer (price * 100,000,000) - user sells at this price
+    askPriceInt: bigint; // Ask price as integer (price * 100,000,000) - user buys at this price
+    midPriceInt: bigint; // Mid price as integer (price * 100,000,000) - for reference
     timestamp: number // Unix timestamp in ms
 }
 
@@ -182,6 +201,7 @@ export enum ErrorCode {
     PRICE_DATA_UNAVAILABLE = "PRICE_DATA_UNAVAILABLE",
     INTERNAL_ERROR = "INTERNAL_ERROR",
     REQUEST_TIMEOUT = "REQUEST_TIMEOUT",
+    ENGINE_NOT_READY = "ENGINE_NOT_READY",
 }
 
 
@@ -200,15 +220,20 @@ Create a price update message
 
 export function createPriceUpdate(
     symbol: string,
-    priceInt: bigint,
+    bidPriceInt: bigint,
+    askPriceInt: bigint,
     timestamp?: number
 ): PriceUpdateMessage {
+    // Calculate the mid-price for reference
+    const midPriceInt = (bidPriceInt + askPriceInt) / 2n;
     return {
         type: "PRICE_UPDATE",
         timestamp: timestamp || Date.now(),
         payload: {
             symbol,
-            priceInt,
+            bidPriceInt,
+            askPriceInt,
+            midPriceInt,
             timestamp: timestamp || Date.now(),
         }
     }

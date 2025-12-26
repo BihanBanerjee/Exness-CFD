@@ -57,11 +57,40 @@ export async function publishRequest(
 }
 
 
+/**
+ * Publish a response to a Redis stream
+ * @param client Redis client instance
+ * @param streamName Name of the response stream
+ * @param response The response object to publish
+ * @returns The stream entry ID
+ */
 
+export async function publishResponse(
+    client: Redis,
+    streamName: string,
+    response: StreamResponse
+): Promise<string> {
+    const serialized = serializeForStream(response);
 
+    // Response stream can use tighter limit since responses are ephemeral and deleted after read
+    const streamId = await client.xadd(
+        streamName,
+        "MAXLEN",
+        "~",
+        "10000", // Response are short-lived (read+delete by HTTP Server)
+        "*",
+        "data",
+        serialized,
+        "requestId",
+        response.requestId
+    );
 
+    if(!streamId) {
+        throw new Error(`Failed to add response to Redis stream: ${streamName}`);
+    }
 
-
+    return streamId;
+}
 
 /**
  * Publish a response to the callback queue (for subscriber pattern)
@@ -72,8 +101,6 @@ export async function publishRequest(
  * @param response The response object to publish
  * @returns The stream entry ID
  */
-
-
 export async function publishResponseToQueue(
     client: Redis,
     queueName: string,
@@ -99,4 +126,21 @@ export async function publishResponseToQueue(
     }
 
     return streamId;
+}
+
+
+/**
+ * Get the latest stream ID (for initializing snapshot tracking)
+ */
+export async function getLatestStreamId(
+    client: Redis,
+    streamName: string
+): Promise<string> {
+    const result = await client.xrevrange(streamName, "+", "-", "COUNT", "1");
+
+    if(result && result.length > 0 && result[0] && result[0][0]) {
+        return result[0][0]; // Return the stream ID.
+    }
+
+    return "0-0" // No entries yet.
 }

@@ -9,9 +9,12 @@ import { publishRequest } from "@exness/redis-client/stream";
 import { getSubscriber } from "@exness/redis-client/subscriber";
 import { 
     createRequest, 
-    STREAMS, 
+    STREAMS,
+    ENGINE_STATUS_KEY,
+    EngineStatus, 
     type CloseOrderPayload, 
     type CloseOrderResponseData, 
+    type EngineStatusData,
     type GetOrderPayload, 
     type GetOrderResponseData, 
     type GetUserOrdersResponseData, 
@@ -23,7 +26,8 @@ import {
     type signupUserResponseData, 
     type StreamResponse, 
     type GetBalanceResponseData,
-    type GetBalancePayload
+    type GetBalancePayload,
+    ErrorCode
 } from "@exness/redis-stream-types";
 
 const DEFAULT_TIMEOUT = 5000 // 5 seconds
@@ -35,10 +39,32 @@ const DEFAULT_TIMEOUT = 5000 // 5 seconds
 export class EngineClient {
     private subscriber = getSubscriber();
 
+    /**
+     * check if the liquidation engine is ready to accept requests
+     * Throws an error if engine is not in READY state
+     */
+
+    private async checkEngineStatus(): Promise<void> {
+        const statusJson = await redisClient.get(ENGINE_STATUS_KEY)
+
+        if(!statusJson) {
+            throw new Error(`${ErrorCode.ENGINE_NOT_READY}: Liquidation engine is not running.
+                Please start the engine first.`)
+        }
+
+        const statusData: EngineStatusData = JSON.parse(statusJson);
+
+        if (statusData.status !== EngineStatus.READY) {
+            const message = statusData.message || `Engine is in ${statusData.status} state`;
+            throw new Error(`${ErrorCode.ENGINE_NOT_READY}: ${message}. Please try again later.`);
+        }
+    }
+
 
     /**
      * Send a request to the engine and wait for a response
      * Register listener BEFORE publishing request to avoid race conditions
+     * Checks ENGINE STATUS BEFORE sending request to avoid discarding during replay.
      */
     private async sendRequest<TPayload, TResponse>(
         type: RequestType,
@@ -47,7 +73,10 @@ export class EngineClient {
         timeout: number = DEFAULT_TIMEOUT
     ): Promise<StreamResponse<TResponse>> {
         try {
-            // Creating type request
+            // Check if engine is ready to accept requests (will throw if not READY)
+            await this.checkEngineStatus();
+            
+            // Creating typed request
             const request = createRequest(type, userId, payload);
             // Registering listener BEFORE publishing request to avoid race condition
             const responsePromise = this.subscriber.waitForMessage<StreamResponse<TResponse>>(
@@ -62,6 +91,10 @@ export class EngineClient {
             const response = await responsePromise;
             return response;
         } catch (error: any) {
+            // Re-throw engine status errors with clear messaging
+            if(error.message?.includes(ErrorCode.ENGINE_NOT_READY)) {
+                throw error;
+            }
             throw new Error(
                 error.message || "Failed to communicate with liquidation engine"
             );

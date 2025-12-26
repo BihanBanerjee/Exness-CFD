@@ -44,15 +44,15 @@ async function main () {
                 symbol: payload.s
             };
 
-            // convert manipulated price to integer format (price * 100,000,000)
-            // We'll use the mid-price for liquidation engine.
-            const midPrice = (manipulatedPrice.bid + manipulatedPrice.ask) / 2;
-            const priceInt = BigInt(Math.round(midPrice * 100_000_000));
+            // Convert manipulated bid/ask prices to integer format (price * 100,000,000)
+            const bidPriceInt = BigInt(Math.round(manipulatedPrice.bid * 100_000_000));
+            const askPriceInt = BigInt(Math.round(manipulatedPrice.ask * 100_000_000));
 
-            // Create price update message for liquidation engine
+            // Create price update message for liquidation engine with both bid and ask
             const priceUpdateMessage = createPriceUpdate(
                 payload.s,
-                priceInt,
+                bidPriceInt, // Real bid price
+                askPriceInt, // Real ask price
                 payload.T
             );
 
