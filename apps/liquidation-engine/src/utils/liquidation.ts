@@ -128,8 +128,8 @@ export function calculateLiquidationPrice(
 /**
  * Check if a LONG position should be liquidated based on current price
  * LONG liquidates when: currentPrice <= liquidationPrice
- * 
- * @param currentPrcieInt Current market price
+ *
+ * @param currentPriceInt Current market price
  * @param liquidationPriceInt Calculated liquidation price
  * @returns true if should liquidate
  */
@@ -182,9 +182,9 @@ export function shouldLiquidate(
 /**
  * Check if stop loss should trigger
  * Stop loss triggers when losses reach the user-defined threshold
- * 
- * @param currentPnLInt Curret profit/loss
- * @param stopLossInt User-defined stop loss threshold (negatice value)
+ *
+ * @param currentPnLInt Current profit/loss
+ * @param stopLossInt User-defined stop loss threshold (negative value)
  * @returns true if stop loss should trigger
  */
 

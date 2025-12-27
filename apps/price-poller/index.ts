@@ -69,7 +69,7 @@ async function main () {
             );
             console.log(`Streamed price update to ${STREAMS.REQUEST}: ${payload.s}`);
 
-            // Stream HONEST prices for database storage (candleatick charts)
+            // Stream HONEST prices for database storage (candlestick charts)
             await redisClient.xadd(
                 BATCH_UPLOADER_STREAM,
                 "*",

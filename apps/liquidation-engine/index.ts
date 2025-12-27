@@ -322,7 +322,7 @@ async function startUnifiedStreamConsumer(): Promise<void> {
  * Start periodic snapshot creation
  */
 function startPeriodicSnapshots(): void {
-    console.log(`\nStarting periodic sanpshots (every ${SNAPSHOT_INTERVAL_MS}ms)`);
+    console.log(`\nStarting periodic snapshots (every ${SNAPSHOT_INTERVAL_MS}ms)`);
 
     snapshotTimer = snapshotManager.startPeriodicSnapshots(
         () => currentStreamId,
@@ -356,7 +356,7 @@ async function shutdown(signal: string): Promise<void> {
         console.error("Error creating final snapshot:", error);
     }
 
-    // Dispalt final state
+    // Display final state
     state.logState();
 
     // Close connections

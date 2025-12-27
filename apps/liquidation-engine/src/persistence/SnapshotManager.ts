@@ -65,7 +65,7 @@ export class SnapshotManager {
     constructor(private state: StateManager) {}
 
     /**
-     * Create and save a sanpshot to the database.
+     * Create and save a snapshot to the database.
      */
 
     async createSnapshot(lastStreamId: string): Promise<string> {

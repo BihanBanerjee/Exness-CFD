@@ -1,6 +1,6 @@
 /** 
  * Redis Stream Types Package
- * Defines all message types for coomunication between HTTP-BACKEND and Liquidation Engine
+ * Defines all message types for communication between HTTP-BACKEND and Liquidation Engine
 */
 
 

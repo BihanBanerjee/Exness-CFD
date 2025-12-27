@@ -42,7 +42,7 @@ async function shutdown(signal: string):Promise<void> {
 
     // Stop accepting new connections
     server.close(() => {
-        console.log("HTTP server closde");
+        console.log("HTTP server closed");
     });
 
     // Stop the Redis subscriber
