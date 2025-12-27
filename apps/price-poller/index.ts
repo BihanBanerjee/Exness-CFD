@@ -69,6 +69,17 @@ async function main () {
             );
             console.log(`Streamed price update to ${STREAMS.REQUEST}: ${payload.s}`);
 
+            // Publish manipulated prices to realtime-server for frontend broadcast
+            const realtimePriceData = JSON.stringify({
+                bidPriceInt: bidPriceInt.toString(),
+                askPriceInt: askPriceInt.toString(),
+                bidPrice: manipulatedPrice.bid,
+                askPrice: manipulatedPrice.ask,
+                symbol: payload.s,
+                timestamp: payload.T
+            });
+            await redisClient.publish(`market:${payload.s}`, realtimePriceData);
+
             // Stream HONEST prices for database storage (candlestick charts)
             await redisClient.xadd(
                 BATCH_UPLOADER_STREAM,
