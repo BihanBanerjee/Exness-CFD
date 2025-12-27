@@ -74,7 +74,7 @@ export class RequestHandler {
                 default:
                     return createErrorResponse(
                         request.requestId,
-                        `Unknowm request type: ${request.type}`
+                        `Unknown request type: ${request.type}`
                     );
             }
         } catch(error: any) {
@@ -164,7 +164,7 @@ export class RequestHandler {
         const qtyInt = toInteger(qty);
 
         // Validate price
-        if(!isValidPrice(executionPrice)) {
+        if(!isValidPrice(executionPriceInt)) {
             return createErrorResponse(
                 requestId,
                 `${ErrorCode.INVALID_PRICE}: Invalid execution price`

@@ -35,9 +35,9 @@ export class RedisSubscriber {
         this.isRunning = true;
 
         // Start runLoop in background (don't wait - it's an infinite loop)
-        // Catch any startup errors an log them
+        // Catch any startup errors and log them
         this.runLoop().catch((error) => {
-            console.error("[SUBSCRIBER] Fatal error in runLoops:", error);
+            console.error("[SUBSCRIBER] Fatal error in runLoop:", error);
             this.isRunning = false;
         })
 

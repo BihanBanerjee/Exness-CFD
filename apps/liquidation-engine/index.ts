@@ -260,7 +260,7 @@ async function startUnifiedStreamConsumer(): Promise<void> {
                                     bidPrice: bidPrice,
                                     askPrice: askPrice,
                                     midPrice: midPrice,
-                                    timeStamp: Date.now()
+                                    timestamp: Date.now()
                                 })
                             );
 
@@ -303,7 +303,7 @@ async function startUnifiedStreamConsumer(): Promise<void> {
                         // Update current stream ID for next read
                         currentStreamId = streamId;
                     } catch (error) {
-                        console.error(`Error processing message ${streamId}: error`);
+                        console.error(`Error processing message ${streamId}:`, error);
                     }
                 }         
             }

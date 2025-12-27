@@ -18,9 +18,14 @@ const clients = new Set<WebSocket>();
 const subscriber = redisClient.duplicate();
 
 async function initializeRedisSubscription() {
-    // Only connect if not already connected
-    if (subscriber.status !== 'ready' && subscriber.status !== 'connecting' && subscriber.status !== 'connect') {
-        await subscriber.connect();
+    try {
+        // Only connect if not already connected
+        if (subscriber.status !== 'ready' && subscriber.status !== 'connecting' && subscriber.status !== 'connect') {
+            await subscriber.connect();
+        }
+    } catch (error) {
+        console.error('Failed to connect to Redis:', error);
+        throw error;
     }
 
     // Set up pattern message listener before subscribing. Here's what to DO when a message arrives --> (instruction/recipe)
@@ -44,8 +49,8 @@ async function initializeRedisSubscription() {
             return;
         }
 
-        // Brodcast to ALL connected frontend clients
-        brodcastToAllClients(symbol, messageStr);
+        // Broadcast to ALL connected frontend clients
+        broadcastToAllClients(symbol, messageStr);
     });
 
     // Subscribe to all market channels from price-poller
@@ -54,14 +59,14 @@ async function initializeRedisSubscription() {
     console.log('Subscribed to Redis market channels (market:*)');
 }
 
-function brodcastToAllClients(symbol: string, data: string) {
+function broadcastToAllClients(symbol: string, data: string) {
     const message = JSON.stringify({
         type: 'price_update',
         symbol,
         data: JSON.parse(data)
     });
 
-    console.log(`Brodcasting ${symbol} update to ${clients.size} clients`);
+    console.log(`Broadcasting ${symbol} update to ${clients.size} clients`);
 
     clients.forEach((ws) => {
         if(ws.readyState === WebSocket.OPEN) {
