@@ -119,10 +119,12 @@
       "name": "realtime-server",
       "dependencies": {
         "@exness/redis-client": "*",
+        "jsonwebtoken": "^9.0.3",
         "ws": "^8.18.3",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "@types/jsonwebtoken": "^9.0.10",
         "@types/ws": "^8.18.1",
       },
       "peerDependencies": {
