@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { prisma } from "@exness/prisma-client";
+import redisClient from "@exness/redis-client";
 import { engineClient } from "../services/engineClient";
 
 const generateToken = (userId: string) => {
@@ -121,6 +123,23 @@ export const signin = async (req: Request, res: Response) => {
         return res.status(500).json({
             error: "Internal server error. Failed to login user"
         })
+    }
+}
+
+export const getWsTicket = async (req: Request, res: Response) => {
+    const token = req.cookies?.token;
+    if (!token) {
+        return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+        const ticket = crypto.randomUUID();
+        // Store ticket in Redis: key = ws:ticket:<ticket>, value = userId, TTL = 30 seconds
+        await redisClient.set(`ws:ticket:${ticket}`, decoded.userId, "EX", 30);
+        return res.json({ ticket });
+    } catch {
+        return res.status(401).json({ error: "Invalid token" });
     }
 }
 

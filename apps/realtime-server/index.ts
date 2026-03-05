@@ -27,6 +27,7 @@ interface ClientMessage {
     type: string;
     clientId?: string;
     token?: string;
+    ticket?: string;
     [key: string]: any;
 }
 
@@ -212,10 +213,15 @@ class RealtimeWebSocketServer {
             try {
                 const message: ClientMessage = JSON.parse(data.toString());
 
-                // Handle authentication
-                if (message.type === 'auth' && message.token && message.clientId) {
-                    clearTimeout(authTimeout);
-                    this.handleClientAuthentication(ws, message.token, message.clientId);
+                // Handle authentication (supports both JWT token and one-time ticket)
+                if (message.type === 'auth' && message.clientId) {
+                    if (message.ticket) {
+                        clearTimeout(authTimeout);
+                        this.handleTicketAuthentication(ws, message.ticket, message.clientId);
+                    } else if (message.token) {
+                        clearTimeout(authTimeout);
+                        this.handleClientAuthentication(ws, message.token, message.clientId);
+                    }
                 }
             } catch (error) {
                 console.error('Error parsing client message:', error);
@@ -279,6 +285,50 @@ class RealtimeWebSocketServer {
 
         } catch (error) {
             console.error('Authentication error:', error);
+            ws.close(4003, 'Authentication failed');
+        }
+    }
+
+    /**
+     * Authenticate client using a one-time Redis ticket
+     */
+    private async handleTicketAuthentication(
+        ws: ExtendedWebSocket,
+        ticket: string,
+        clientId: string
+    ): Promise<void> {
+        try {
+            const redisKey = `ws:ticket:${ticket}`;
+            const userId = await redisClient.get(redisKey);
+
+            if (!userId) {
+                console.log('Invalid or expired ticket');
+                ws.close(4002, 'Invalid or expired ticket');
+                return;
+            }
+
+            // Delete the ticket immediately (one-time use)
+            await redisClient.del(redisKey);
+
+            // Check if this client is already connected
+            const existingConnection = this.clients.get(clientId);
+            if (existingConnection) {
+                if (existingConnection.readyState === WebSocket.OPEN) {
+                    existingConnection.close(1000, 'Replaced by new connection');
+                }
+                this.clients.delete(clientId);
+            }
+
+            // Mark as authenticated
+            ws.clientId = clientId;
+            ws.userId = userId;
+            ws.isAuthenticated = true;
+            this.clients.set(clientId, ws);
+
+            console.log(`Client ${clientId} (User: ${userId}) authenticated via ticket. Total clients: ${this.clients.size}`);
+            this.sendWelcomeMessage(ws);
+        } catch (error) {
+            console.error('Ticket authentication error:', error);
             ws.close(4003, 'Authentication failed');
         }
     }
