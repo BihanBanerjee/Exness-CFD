@@ -168,21 +168,11 @@ docker-compose up -d
 # 3. Run migrations
 cd packages/prisma-client && bunx prisma migrate deploy && cd ../..
 
-# 4. Start all services (recommended)
-bun run start:all
-```
+# 4. Start all backend services
+bun start:dev
 
-**Or start services individually** (each in a separate terminal):
-
-```bash
-# Order matters — start in this sequence
-cd apps/price-poller        && bun run start   # 1. Price feed
-cd apps/liquidation-engine  && bun run start   # 2. Trading engine
-cd apps/batch-uploader      && bun run start   # 3. Candle data
-cd apps/db-worker           && bun run start   # 4. Order persistence
-cd apps/realtime-server     && bun run start   # 5. WebSocket server
-cd apps/http-backend        && bun run start   # 6. HTTP API
-cd apps/web                 && bun run dev     # 7. Frontend
+# 5. Start the frontend (in a separate terminal)
+cd apps/web && bun run dev
 ```
 
 ### Service Ports
