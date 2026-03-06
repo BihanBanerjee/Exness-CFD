@@ -1,146 +1,144 @@
-# Crypto Trading Platform
+# Velox — Real-Time Leveraged Trading Platform
 
-A high-performance, real-time cryptocurrency trading platform with automatic liquidation, leveraged trading, and live price streaming. Built with a microservices architecture using TypeScript, Redis Streams, PostgreSQL/TimescaleDB, and WebSockets.
+A production-grade, real-time cryptocurrency trading platform with automatic liquidation, leveraged perpetual contracts, and live price streaming. Built as a distributed microservices system using TypeScript, Redis Streams, PostgreSQL/TimescaleDB, WebSockets, and Next.js.
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Services](#services)
-- [API Documentation](#api-documentation)
-- [Data Flow](#data-flow)
-- [Features](#features)
-- [Environment Variables](#environment-variables)
-- [Database Schema](#database-schema)
-- [Development](#development)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-1.3+-fbf0df?logo=bun&logoColor=000)
+![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.2-06B6D4?logo=tailwindcss&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-Streams-DC382D?logo=redis&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
 ## Overview
 
-This platform enables users to trade cryptocurrencies (BTC, ETH, SOL) with leverage up to 100x. It features:
+Velox enables users to trade cryptocurrencies (BTC, ETH, SOL) with up to 100x leverage on perpetual contracts. The platform features a professional trading interface with real-time candlestick charts, live bid/ask streaming, and an in-memory liquidation engine that monitors every price tick.
 
-- Real-time price streaming from Binance
-- Leveraged LONG/SHORT positions
-- Automatic liquidation monitoring (margin calls, stop-loss, take-profit)
-- Historical candlestick charts
-- BigInt precision arithmetic (no floating-point errors)
-- Event sourcing with crash recovery
-- WebSocket-based real-time updates
+**Key highlights:**
 
-**Key Metrics:**
-- Initial user balance: $1,000 (virtual)
-- Supported assets: BTCUSDT, ETHUSDT, SOLUSDT
-- Leverage range: 1x - 100x
-- Price precision: 8 decimal places (10^8 integer scale)
-- Snapshot persistence: Every 15 seconds
+- 7 microservices communicating via Redis Streams
+- In-memory trading engine with event sourcing and crash recovery
+- Real-time WebSocket price feeds from Binance
+- Professional trading UI with interactive charts and position management
+- Dual authentication: password + magic link email sign-in
+- BigInt arithmetic throughout — zero floating-point errors
+
+| Metric | Value |
+|--------|-------|
+| Supported assets | BTCUSDT, ETHUSDT, SOLUSDT |
+| Leverage range | 1x – 100x |
+| Price precision | 8 decimal places (10^8 scale) |
+| Snapshot interval | 15 seconds |
+| Initial balance | $1,000 (virtual) |
+| Candle timeframes | 30s, 1m, 5m, 15m, 1h, 4h, 1d |
 
 ---
 
 ## Architecture
 
-### High-Level Architecture
+### System Overview
 
 ```
-┌─────────────────┐
-│   Binance API   │
-│   (WebSocket)   │
-└────────┬────────┘
-         │ Real-time prices
-         ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      PRICE POLLER                           │
-│  - Applies 0.1% bid/ask spread                             │
-│  - Dual price streams (manipulated + honest)               │
-└──────────┬────────────────────────────┬─────────────────────┘
-           │                            │
-           │ Manipulated prices         │ Honest prices
-           ↓                            ↓
-    ┌──────────────┐            ┌──────────────────┐
-    │ Redis Stream │            │  Redis Stream    │
-    │  (trading)   │            │  (charting)      │
-    └──────┬───────┘            └────────┬─────────┘
-           │                             │
-           ↓                             ↓
-┌──────────────────────┐        ┌────────────────┐
-│ LIQUIDATION ENGINE   │        │ BATCH UPLOADER │
-│ - Order management   │        │ - Candle data  │
-│ - Auto-liquidation   │        └────────┬───────┘
-│ - State snapshots    │                 │
-└──────┬───────────────┘                 │
-       │                                 │
-       ↓                                 ↓
-┌──────────────┐                ┌────────────────┐
-│ Redis Stream │                │  TimescaleDB   │
-│ (responses)  │                │  (candles)     │
-└──────┬───────┘                └────────────────┘
-       │
-       ├───→ HTTP Backend → Frontend
-       │
-       └───→ DB Worker → PostgreSQL (closed orders)
+                          ┌─────────────────┐
+                          │   Binance API   │
+                          │   (WebSocket)   │
+                          └────────┬────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │  PRICE POLLER   │
+                          │  ±0.1% spread   │
+                          └───┬─────────┬───┘
+                              │         │
+              Manipulated     │         │    Honest
+              prices          │         │    prices
+                              │         │
+         ┌────────────────────▼──┐   ┌──▼────────────────┐
+         │     Redis Stream      │   │   Redis Stream    │
+         │    (request:stream)   │   │ (batch:uploader)  │
+         └──────────┬────────────┘   └────────┬──────────┘
+                    │                         │
+         ┌──────────▼────────────┐   ┌────────▼──────────┐
+         │  LIQUIDATION ENGINE   │   │  BATCH UPLOADER   │
+         │  In-memory state      │   │  100-msg batches  │
+         │  Auto-liquidation     │   └────────┬──────────┘
+         │  Snapshots + replay   │            │
+         └──────────┬────────────┘            │
+                    │                         │
+         ┌──────────▼────────────┐   ┌────────▼──────────┐
+         │   Redis Response      │   │    TimescaleDB    │
+         │     Stream            │   │  Candle views     │
+         └──┬───────────────┬────┘   └───────────────────┘
+            │               │
+  ┌─────────▼──────┐  ┌────▼──────────┐
+  │  HTTP BACKEND  │  │   DB WORKER   │
+  │  Express API   │  │  Persist      │
+  │  Port 3005     │  │  closed orders│
+  └───────┬────────┘  └───────────────┘
+          │
+          │  REST + Cookies
+          │
+  ┌───────▼────────┐     ┌──────────────────┐
+  │   FRONTEND     │◄────│ REALTIME SERVER  │
+  │   Next.js      │ WS  │  Port 3006       │
+  │   Port 3000    │     │  Redis Pub/Sub   │
+  └────────────────┘     └──────────────────┘
 ```
 
-### Request Flow
+### Request-Response Flow
 
 ```
-Frontend
-   ↓ HTTP POST /api/v1/order/open
-HTTP Backend (Port 3005)
-   ↓ Validate & publish to Redis Stream
-Redis Stream (request:stream)
-   ↓ XREAD
-Liquidation Engine (In-memory state)
-   ↓ Process & update state
-Redis Queue (response:queue)
-   ↓ Subscriber pattern
-HTTP Backend
-   ↓ JSON response
-Frontend
+Frontend  →  HTTP Backend  →  Redis Stream  →  Liquidation Engine
+                                                       │
+Frontend  ←  HTTP Backend  ←  Redis Subscriber  ←──────┘
 ```
+
+All order operations flow through Redis Streams. The HTTP backend is stateless — the liquidation engine is the single source of truth for balances and positions.
 
 ---
 
 ## Tech Stack
 
-### Backend Services
-- **Runtime:** Bun (JavaScript runtime)
-- **Language:** TypeScript
-- **HTTP Framework:** Express.js
-- **WebSocket:** ws library
-- **Message Queue:** Redis Streams
-- **Pub/Sub:** Redis Pub/Sub
-- **Database:** PostgreSQL 17 with TimescaleDB
-- **ORM:** Prisma
-- **Authentication:** JWT (httpOnly cookies)
-- **Price Source:** Binance WebSocket API
-
-### Shared Packages
-- **@exness/prisma-client:** Database client
-- **@exness/redis-client:** Redis client wrapper
-- **@exness/redis-stream-types:** Type-safe stream messages
-- **@exness/price-utils:** BigInt price calculations
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Bun |
+| Language | TypeScript (strict) |
+| Frontend | Next.js 16, React 19, Tailwind CSS 4, lightweight-charts |
+| HTTP API | Express.js 5 |
+| WebSocket | ws |
+| Message broker | Redis Streams + Pub/Sub |
+| Database | PostgreSQL 17 + TimescaleDB |
+| ORM | Prisma |
+| Auth | JWT (httpOnly cookies) + Magic Link (Resend) |
+| Validation | Zod |
+| Monorepo | Turborepo |
 
 ---
 
 ## Project Structure
 
 ```
-ExnessRedoMine/
+velox/
 ├── apps/
-│   ├── batch-uploader/       # Batch insert candle data to TimescaleDB
-│   ├── db-worker/            # Persist closed orders to PostgreSQL
-│   ├── http-backend/         # REST API server (Express)
-│   ├── liquidation-engine/   # Core trading engine with auto-liquidation
-│   ├── price-poller/         # Fetch prices from Binance & distribute
-│   └── realtime-server/      # WebSocket server for live price streaming
+│   ├── web/                    # Next.js frontend (React 19 + Tailwind 4)
+│   ├── http-backend/           # REST API gateway (Express)
+│   ├── liquidation-engine/     # Core trading engine + auto-liquidation
+│   ├── realtime-server/        # WebSocket server for live prices
+│   ├── price-poller/           # Binance price ingestion + spread
+│   ├── db-worker/              # Persist closed orders to PostgreSQL
+│   └── batch-uploader/         # Batch trade data → TimescaleDB
+│
 ├── packages/
-│   ├── price-utils/          # BigInt arithmetic utilities
-│   ├── prisma-client/        # Prisma schema & generated client
-│   ├── redis-client/         # Redis client & subscriber
-│   └── redis-stream-types/   # Type definitions for Redis messages
+│   ├── validation/             # Zod schemas + Express middleware
+│   ├── prisma-client/          # Prisma schema + generated client
+│   ├── redis-client/           # Redis client, streams, subscriber
+│   ├── redis-stream-types/     # Type-safe stream message definitions
+│   ├── price-utils/            # BigInt arithmetic (10^8 scale)
+│   └── ui/                     # Shared UI components
+│
+├── docker-compose.yml
+├── turbo.json
 └── README.md
 ```
 
@@ -150,170 +148,138 @@ ExnessRedoMine/
 
 ### Prerequisites
 
-- **Bun** v1.3.4 or higher
-- **Docker** and **Docker Compose**
-- **PostgreSQL** 17 with TimescaleDB extension
-- **Redis** 7.x
+- [Bun](https://bun.sh) v1.3.4+
+- [Docker](https://www.docker.com/) + Docker Compose
+- PostgreSQL 17 with TimescaleDB
+- Redis 7.x
 
-### Installation
+### Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd ExnessRedoMine
-   ```
+```bash
+# 1. Clone and install
+git clone <repository-url>
+cd velox
+bun install
 
-2. **Install dependencies**
-   ```bash
-   bun install
-   ```
+# 2. Start infrastructure
+docker-compose up -d
+# PostgreSQL on :5433, Redis on :6380
 
-3. **Start infrastructure services**
-   ```bash
-   docker-compose up -d
-   # Starts PostgreSQL (port 5432) and Redis (port 6380)
-   ```
+# 3. Run migrations
+cd packages/prisma-client && bunx prisma migrate deploy && cd ../..
 
-4. **Run database migrations**
-   ```bash
-   cd packages/prisma-client
-   bunx prisma migrate deploy
-   cd ../..
-   ```
+# 4. Start all services (recommended)
+bun run start:all
+```
 
-5. **Start all services**
+**Or start services individually** (each in a separate terminal):
 
-   **Option A: Automatic Sequential Startup (Recommended)**
-   ```bash
-   bun run start:all
-   ```
-   This will start all services in the correct order automatically.
+```bash
+# Order matters — start in this sequence
+cd apps/price-poller        && bun run start   # 1. Price feed
+cd apps/liquidation-engine  && bun run start   # 2. Trading engine
+cd apps/batch-uploader      && bun run start   # 3. Candle data
+cd apps/db-worker           && bun run start   # 4. Order persistence
+cd apps/realtime-server     && bun run start   # 5. WebSocket server
+cd apps/http-backend        && bun run start   # 6. HTTP API
+cd apps/web                 && bun run dev     # 7. Frontend
+```
 
-   **Option B: Manual Startup in Separate Terminals**
-   ```bash
-   # Terminal 1: Price Poller
-   turbo run start --filter=@exness/price-poller
+### Service Ports
 
-   # Terminal 2: Liquidation Engine (wait 3s)
-   turbo run start --filter=liquidation-engine
-
-   # Terminal 3: Batch Uploader (wait 5s)
-   turbo run start --filter=@exness/batch-uploader
-
-   # Terminal 4: DB Worker (wait 2s)
-   turbo run start --filter=db-worker
-
-   # Terminal 5: Realtime Server (wait 2s)
-   turbo run start --filter=realtime-server
-
-   # Terminal 6: HTTP Backend (wait 2s)
-   turbo run start --filter=@exness/http-backend
-   ```
-
-   See [STARTUP-GUIDE.md](STARTUP-GUIDE.md) for detailed startup order explanation.
-
-### Quick Start (Development)
-
-All services should be running on:
-- HTTP API: `http://localhost:3005`
-- WebSocket: `ws://localhost:3006`
-- Redis: `localhost:6380`
-- PostgreSQL: `localhost:5432`
+| Service | Port |
+|---------|------|
+| Frontend | `http://localhost:3000` |
+| HTTP API | `http://localhost:3005` |
+| WebSocket | `ws://localhost:3006` |
+| PostgreSQL | `localhost:5433` |
+| Redis | `localhost:6380` |
 
 ---
 
 ## Services
 
-### 1. Price Poller (`apps/price-poller`)
+### Frontend (`apps/web`)
 
-**Purpose:** Fetches real-time prices from Binance and distributes them.
+Next.js 16 trading interface styled with Tailwind CSS 4.
 
-**Key Features:**
-- WebSocket connection to Binance for BTC, ETH, SOL
-- Applies 0.1% bid/ask spread for trading
-- Dual price streams:
-  - Manipulated prices → Liquidation Engine (for P&L calculation)
-  - Honest prices → Batch Uploader (for charts)
-- Redis Pub/Sub broadcast to Realtime Server
+**Pages:**
+- `/` — Landing page with sign-in / register options
+- `/signin` — Dual auth: password form + magic link email tab
+- `/register` — Account creation (email, phone, password)
+- `/trade` — Full trading dashboard
 
-**Output Streams:**
-- `request:stream` - Trading prices
-- `batch:uploader:stream` - Chart data
-- `market:*` - Pub/Sub channels
-
----
-
-### 2. Liquidation Engine (`apps/liquidation-engine`)
-
-**Purpose:** Core trading engine with in-memory state and auto-liquidation.
-
-**Key Features:**
-- In-memory order book and user balances
-- Request processing (PLACE_ORDER, CLOSE_ORDER, GET_BALANCE, etc.)
-- Automatic liquidation monitoring:
-  - Margin call (90% loss threshold)
-  - Stop-loss triggers
-  - Take-profit triggers
-- State snapshots every 15 seconds
-- Event replay on startup for crash recovery
-- BigInt precision arithmetic
-
-**Engine Status:**
-- `STARTING` - Initialization
-- `REPLAYING` - Event replay (rejects requests)
-- `READY` - Accepting requests
-- `SHUTDOWN` - Graceful shutdown
-
-**Supported Requests:**
-- `REGISTER_USER` - Initialize user with balance
-- `PLACE_ORDER` - Open LONG/SHORT position
-- `CLOSE_ORDER` - Close position with P&L
-- `GET_BALANCE` - Retrieve user balance
-- `GET_ORDER` - Get order details
-- `GET_USER_ORDERS` - List user's orders
+**Trading UI features:**
+- Real-time candlestick chart (lightweight-charts) with 7 timeframes
+- Asset selector with live bid/ask prices
+- Order form with leverage slider (1–100x), stop-loss, take-profit
+- Resizable sidebar and positions panel (drag-to-resize)
+- Open positions with live P&L, closed positions with close reason badges
+- Balance, equity, and total P&L in the top bar
+- Profile menu with sign-out
+- WebSocket price streaming with ticket-based auth
 
 ---
 
-### 3. HTTP Backend (`apps/http-backend`)
+### Liquidation Engine (`apps/liquidation-engine`)
 
-**Purpose:** REST API server for frontend integration.
+The core of the platform. Maintains all trading state in memory for sub-millisecond order processing.
 
-**Endpoints:**
+**Capabilities:**
+- Order placement, closure, and balance management
+- Automatic liquidation on every price tick:
+  - **Margin call** — triggered at 90% margin loss
+  - **Stop-loss / Take-profit** — price-based triggers
+- LONG orders close at bid price, SHORT orders close at ask price
+- State snapshots every 15 seconds → PostgreSQL
+- Full event replay from last snapshot on restart
 
-**Authentication:**
-- `POST /api/v1/user/signup` - User registration
-- `POST /api/v1/user/signin` - User login
-- `POST /api/v1/user/signout` - User logout
-
-**Order Management:**
-- `POST /api/v1/order/open` - Open new order
-- `POST /api/v1/order/close/:orderId` - Close order
-- `GET /api/v1/order/:orderId` - Get order details
-- `GET /api/v1/order/user/orders?status=OPEN|CLOSED` - List orders
-- `GET /api/v1/order/user/balance` - Get user balance
-
-**Candle Data:**
-- `GET /candles?asset=BTCUSDT&duration=1m` - Historical candles
-  - Durations: 1m, 2m, 5m, 10m, 1d
-  - Returns up to 1000 candles
-
-**Authentication:**
-- JWT tokens stored in httpOnly cookies
-- Automatic engine registration on signup with $1000 balance
+**Engine states:** `STARTING` → `REPLAYING` → `READY` → `SHUTDOWN`
 
 ---
 
-### 4. Realtime Server (`apps/realtime-server`)
+### HTTP Backend (`apps/http-backend`)
 
-**Purpose:** WebSocket server for live price streaming to frontend.
+Stateless REST API that validates requests and forwards them to the engine via Redis Streams.
 
-**Features:**
-- WebSocket server on port 3006
+**Auth endpoints:**
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/user/signup` | Register with email, phone, password |
+| POST | `/api/v1/user/signin` | Sign in with password |
+| POST | `/api/v1/user/magic-link` | Send magic link email |
+| GET | `/api/v1/user/auth/verify` | Verify magic link token |
+| POST | `/api/v1/user/signout` | Clear auth cookie |
+| GET | `/api/v1/user/me` | Get current user |
+| GET | `/api/v1/user/ws-ticket` | One-time WebSocket ticket |
+
+**Order endpoints** (all require auth):
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/order/open` | Open a position |
+| POST | `/api/v1/order/close/:orderId` | Close a position |
+| GET | `/api/v1/order/user/orders?status=OPEN\|CLOSED` | List positions |
+| GET | `/api/v1/order/user/balance` | Get balance |
+| GET | `/api/v1/order/:orderId` | Get order details |
+
+**Candle endpoint:**
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/candles?asset=BTCUSDT&duration=1m` | OHLCV candles (up to 1000) |
+
+Supported durations: `30s`, `1m`, `5m`, `15m`, `1h`, `4h`, `1d`
+
+---
+
+### Realtime Server (`apps/realtime-server`)
+
+WebSocket server that broadcasts live prices to all authenticated clients.
+
 - Subscribes to Redis Pub/Sub `market:*` channels
-- Broadcasts price updates to all connected clients
-- Connection tracking and graceful disconnect handling
+- Ticket-based auth (one-time use, 30s TTL) with JWT fallback
+- Heartbeat ping/pong (30s interval)
+- Multi-tab support (multiple connections per user)
 
-**Message Format:**
 ```json
 {
   "type": "price_update",
@@ -321,8 +287,6 @@ All services should be running on:
   "data": {
     "bidPrice": 92000.50,
     "askPrice": 92092.50,
-    "bidPriceInt": "9200050000000",
-    "askPriceInt": "9209250000000",
     "timestamp": 1703001234567
   }
 }
@@ -330,497 +294,263 @@ All services should be running on:
 
 ---
 
-### 5. DB Worker (`apps/db-worker`)
+### Price Poller (`apps/price-poller`)
 
-**Purpose:** Persists closed orders to PostgreSQL for historical display.
+Connects to Binance WebSocket and distributes prices with a 0.1% bid/ask spread.
 
-**Features:**
-- Listens to `response:stream` for CLOSE_ORDER responses
-- Calculates close price from P&L
-- Inserts into `ClosedOrder` table
-- Non-blocking (won't crash engine on DB errors)
-- Handles both manual closures and auto-liquidations
+- Subscribes to `btcusdt@trade`, `ethusdt@trade`, `solusdt@trade`
+- Publishes manipulated prices to the request stream (for trading)
+- Publishes honest prices to the batch uploader stream (for charts)
+- Broadcasts to `market:{SYMBOL}` Redis channels (for WebSocket)
 
 ---
 
-### 6. Batch Uploader (`apps/batch-uploader`)
+### DB Worker (`apps/db-worker`)
 
-**Purpose:** Batch insert trade data into TimescaleDB for candlestick charts.
+Listens to the response stream for closed orders and persists them to PostgreSQL.
 
-**Features:**
-- Consumer group for distributed processing
-- Batches 100 messages or 5-second timeout
-- Inserts into TimescaleDB `Trade` table
-- Materialized views for 1m, 2m, 5m, 10m, 1d candles
-- Automatic ACK after successful insert
+- Calculates close price from P&L data
+- Idempotent upserts (safe on restart)
+- Tracks close reason: `MANUAL`, `MARGIN_CALL`, `STOP_LOSS`, `TAKE_PROFIT`
 
 ---
 
-## API Documentation
+### Batch Uploader (`apps/batch-uploader`)
 
-### Authentication
+Accumulates trade ticks and batch-inserts them into TimescaleDB.
 
-#### Signup
-```http
-POST /api/v1/user/signup
-Content-Type: application/json
+- Batch size: 100 messages or 5-second flush timeout
+- Feeds TimescaleDB materialized views for candlestick aggregation
 
-{
-  "email": "user@example.com",
-  "phone": 1234567890,
-  "password": "securePassword123"
-}
+---
 
-Response:
-{
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com"
-  }
-}
+## API Examples
+
+### Register a new user
+
+```bash
+curl -X POST http://localhost:3005/api/v1/user/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "trader@example.com", "phone": 1234567890, "password": "secure123"}'
 ```
 
-#### Login
-```http
-POST /api/v1/user/signin
-Content-Type: application/json
+### Open a leveraged position
 
-{
-  "email": "user@example.com",
-  "password": "securePassword123"
-}
-
-Response:
-{
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com"
-  }
-}
-```
-
-### Order Management
-
-#### Open Order
-```http
-POST /api/v1/order/open
-Content-Type: application/json
-Cookie: token=<jwt>
-
-{
-  "orderType": "LONG",
-  "asset": "BTCUSDT",
-  "leverage": 10,
-  "qty": 100,
-  "stopLoss": 90000,      // Optional
-  "takeProfit": 95000     // Optional
-}
-
-Response:
-{
-  "success": true,
-  "order": {
-    "orderId": "uuid",
-    "userId": "uuid",
-    "asset": "BTCUSDT",
+```bash
+curl -X POST http://localhost:3005/api/v1/order/open \
+  -H "Content-Type: application/json" \
+  -b "token=<jwt>" \
+  -d '{
     "orderType": "LONG",
+    "asset": "BTCUSDT",
     "leverage": 10,
-    "margin": "10.00",
-    "marginInt": "1000000000",
-    "executionPrice": "92000.50",
-    "executionPriceInt": "9200050000000",
-    "qty": "100.00000000",
-    "qtyInt": "10000000000",
-    "status": "OPEN",
-    "currentPnL": "0.00",
-    "createdAt": "2023-12-27T10:00:00.000Z"
-  },
-  "balance": {
-    "balance": "990.00",
-    "balanceInt": "99000000000"
-  }
-}
+    "qty": 100,
+    "stopLoss": 90000,
+    "takeProfit": 95000
+  }'
 ```
 
-#### Close Order
-```http
-POST /api/v1/order/close/:orderId
-Cookie: token=<jwt>
+### Send a magic link
 
-Response:
-{
-  "success": true,
-  "order": {
-    "orderId": "uuid",
-    "finalPnL": "5.50",
-    "finalPnLInt": "550000000",
-    "closedAt": "2023-12-27T10:05:00.000Z"
-  },
-  "balance": {
-    "balance": "1005.50",
-    "balanceInt": "100550000000"
-  }
-}
+```bash
+curl -X POST http://localhost:3005/api/v1/user/magic-link \
+  -H "Content-Type: application/json" \
+  -d '{"email": "trader@example.com"}'
 ```
-
-#### Get User Orders
-```http
-GET /api/v1/order/user/orders?status=OPEN
-Cookie: token=<jwt>
-
-Response:
-{
-  "orders": [
-    {
-      "orderId": "uuid",
-      "asset": "BTCUSDT",
-      "orderType": "LONG",
-      "leverage": 10,
-      "margin": "10.00",
-      "executionPrice": "92000.50",
-      "qty": "100.00000000",
-      "currentPnL": "2.50",
-      "status": "OPEN",
-      "createdAt": "2023-12-27T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-#### Get Balance
-```http
-GET /api/v1/order/user/balance
-Cookie: token=<jwt>
-
-Response:
-{
-  "balance": "1000.00",
-  "balanceInt": "100000000000"
-}
-```
-
-### Candle Data
-
-#### Get Candlesticks
-```http
-GET /candles?asset=BTCUSDT&duration=1m
-
-Response:
-{
-  "candles": [
-    {
-      "time": "2023-12-27T10:00:00.000Z",
-      "symbol": "BTCUSDT",
-      "open": "92000.50",
-      "high": "92150.75",
-      "low": "91950.25",
-      "close": "92100.00",
-      "volume": "1500.50"
-    }
-  ]
-}
-```
-
-**Supported durations:** `1m`, `2m`, `5m`, `10m`, `1d`
 
 ---
 
 ## Data Flow
 
-### Price Data Flow
-
-```
-Binance WebSocket
-  ↓ Trade events (price, quantity, timestamp)
-Price Poller
-  ↓ Calculate bid/ask with 0.1% spread
-  ├─ Manipulated Prices
-  │  ├─ Redis Stream (request:stream) → Liquidation Engine
-  │  └─ Redis Pub/Sub (market:*) → Realtime Server → Frontend
-  │
-  └─ Honest Prices
-     └─ Redis Stream (batch:uploader:stream) → Batch Uploader → TimescaleDB
-```
-
 ### Order Lifecycle
 
 ```
-1. User opens order
+1. User places order
    Frontend → HTTP Backend → Redis Stream (request:stream)
 
 2. Engine processes
-   Liquidation Engine reads from stream → Validates → Updates state
-   → Publishes response to Redis Queue
+   Liquidation Engine validates → deducts margin → opens position
+   → publishes response to Redis
 
 3. Response delivered
-   HTTP Backend subscriber receives response → Returns to frontend
+   HTTP Backend subscriber receives response → returns to frontend
 
 4. Continuous monitoring
-   Price Monitor checks all open orders every price update
-   → Triggers liquidation if conditions met
+   Every price tick: engine checks all open orders for liquidation
+   → margin call, stop-loss, or take-profit triggers
 
-5. Order closed
-   Engine publishes CLOSE_ORDER response
+5. Order closed (manual or automatic)
+   Engine calculates P&L → returns margin + P&L to balance
    → DB Worker persists to PostgreSQL
-   → HTTP Backend returns to frontend
 ```
 
-### State Persistence
+### State Recovery
 
 ```
-Liquidation Engine (in-memory)
-  ↓ Every 15 seconds
-Snapshot Manager serializes state
-  ↓ BigInt → string conversion
-PostgreSQL Snapshot table
-  ↓ On engine restart
-Load latest snapshot + replay events from stream
-  ↓ Restore balances and orders
-Engine ready to process new requests
-```
-
----
-
-## Features
-
-### Trading Features
-- ✅ Leveraged trading (1x - 100x)
-- ✅ LONG and SHORT positions
-- ✅ Real-time P&L calculation
-- ✅ Stop-loss and take-profit orders
-- ✅ Automatic margin call liquidation (90% loss)
-- ✅ Multi-asset support (BTC, ETH, SOL)
-
-### Technical Features
-- ✅ BigInt precision (no floating-point errors)
-- ✅ Event sourcing with replay capability
-- ✅ Crash recovery via snapshots
-- ✅ Real-time WebSocket price streaming
-- ✅ Historical candlestick charts
-- ✅ Request/response timeout handling
-- ✅ Proper bid/ask spread for LONG/SHORT
-- ✅ Graceful shutdown handling
-
-### Security Features
-- ✅ JWT authentication with httpOnly cookies
-- ✅ Password hashing with bcrypt
-- ✅ Protected API routes with auth middleware
-- ✅ CORS enabled with credentials support
-
----
-
-## Environment Variables
-
-### HTTP Backend (.env)
-```env
-PORT=3005
-DATABASE_URL=postgresql://user:password@localhost:5432/trading
-JWT_SECRET=your-secret-key-here
-REDIS_HOST=localhost
-REDIS_PORT=6380
-NODE_ENV=development
-```
-
-### Price Poller (.env)
-```env
-REDIS_HOST=localhost
-REDIS_PORT=6380
-```
-
-### Liquidation Engine (.env)
-```env
-REDIS_HOST=localhost
-REDIS_PORT=6380
-DATABASE_URL=postgresql://user:password@localhost:5432/trading
-```
-
-### Batch Uploader (.env)
-```env
-REDIS_HOST=localhost
-REDIS_PORT=6380
-DATABASE_URL=postgresql://user:password@localhost:5432/trading
+Engine crash → restart
+  ↓
+Load latest snapshot from PostgreSQL
+  ↓
+Replay all Redis Stream events since snapshot's lastStreamId
+  ↓
+State fully restored → engine status: READY
 ```
 
 ---
 
 ## Database Schema
 
-### Users Table
+### Users
+
 ```sql
 CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email VARCHAR UNIQUE NOT NULL,
-  phone INTEGER UNIQUE NOT NULL,
+  id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email    VARCHAR UNIQUE NOT NULL,
+  phone    BIGINT UNIQUE NOT NULL,
   password VARCHAR NOT NULL
 );
 ```
 
-### Closed Orders Table
+### Closed Orders
+
 ```sql
 CREATE TABLE closed_orders (
-  orderId UUID PRIMARY KEY,
-  userId UUID NOT NULL,
-  asset VARCHAR NOT NULL,
-  orderType VARCHAR NOT NULL,
-  leverage INTEGER NOT NULL,
-  marginInt BIGINT NOT NULL,
-  executionPriceInt BIGINT NOT NULL,
-  closePriceInt BIGINT NOT NULL,
-  qtyInt BIGINT NOT NULL,
-  stopLossInt BIGINT NOT NULL,
-  takeProfitInt BIGINT NOT NULL,
-  finalPnLInt BIGINT NOT NULL,
-  createdAt TIMESTAMP NOT NULL,
-  closedAt TIMESTAMP NOT NULL
+  "orderId"          UUID PRIMARY KEY,
+  "userId"           UUID NOT NULL,
+  asset              VARCHAR NOT NULL,
+  "orderType"        VARCHAR NOT NULL,      -- LONG | SHORT
+  leverage           INTEGER NOT NULL,
+  "marginInt"        BIGINT NOT NULL,
+  "executionPriceInt" BIGINT NOT NULL,
+  "closePriceInt"    BIGINT NOT NULL,
+  "qtyInt"           BIGINT NOT NULL,
+  "stopLossInt"      BIGINT,
+  "takeProfitInt"    BIGINT,
+  "finalPnLInt"      BIGINT NOT NULL,
+  "closeReason"      VARCHAR,               -- MANUAL | MARGIN_CALL | STOP_LOSS | TAKE_PROFIT
+  "createdAt"        TIMESTAMP NOT NULL,
+  "closedAt"         TIMESTAMP NOT NULL
 );
-
-CREATE INDEX idx_closed_orders_user ON closed_orders(userId, closedAt);
-CREATE INDEX idx_closed_orders_time ON closed_orders(closedAt);
-CREATE INDEX idx_closed_orders_asset ON closed_orders(asset);
 ```
 
-### Trades Table (TimescaleDB Hypertable)
+### Trades (TimescaleDB Hypertable)
+
 ```sql
 CREATE TABLE trades (
-  id VARCHAR NOT NULL,
-  time TIMESTAMPTZ NOT NULL,
-  symbol VARCHAR NOT NULL,
-  priceInt BIGINT NOT NULL,
-  qtyInt BIGINT NOT NULL,
-  createdAt TIMESTAMP DEFAULT NOW(),
+  id        VARCHAR NOT NULL,
+  time      TIMESTAMPTZ NOT NULL,
+  symbol    VARCHAR NOT NULL,
+  "priceInt" BIGINT NOT NULL,
+  "qtyInt"  BIGINT NOT NULL,
   PRIMARY KEY (id, time)
 );
 
 SELECT create_hypertable('trades', 'time');
-
-CREATE INDEX idx_trades_symbol_time ON trades(symbol, time);
 ```
 
-### Snapshots Table
+### Snapshots
+
 ```sql
 CREATE TABLE snapshots (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  timestamp TIMESTAMP DEFAULT NOW(),
-  lastStreamId VARCHAR NOT NULL,
-  data JSONB NOT NULL,
-  createdAt TIMESTAMP DEFAULT NOW()
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  timestamp      TIMESTAMP DEFAULT NOW(),
+  "lastStreamId" VARCHAR NOT NULL,
+  data           JSONB NOT NULL
 );
-
-CREATE INDEX idx_snapshots_timestamp ON snapshots(timestamp);
 ```
 
 ---
 
-## Development
+## Environment Variables
 
-### Running Individual Services
+### HTTP Backend
 
-```bash
-# Price Poller
-cd apps/price-poller && bun run index.ts
-
-# Liquidation Engine
-cd apps/liquidation-engine && bun run index.ts
-
-# HTTP Backend
-cd apps/http-backend && bun run index.ts
-
-# Realtime Server
-cd apps/realtime-server && bun run index.ts
-
-# DB Worker
-cd apps/db-worker && bun run index.ts
-
-# Batch Uploader
-cd apps/batch-uploader && bun run index.ts
+```env
+API_PORT=3005
+JWT_SECRET=your-secret-key
+DATABASE_URL=postgresql://postgres:password@localhost:5433/trading_db
+REDIS_HOST=localhost
+REDIS_PORT=6380
+RESEND_API_KEY=re_xxxxx           # For magic link emails
+API_BASE_URL=http://localhost:3005
+FRONTEND_URL=http://localhost:3000
 ```
 
-### Database Migrations
+### Liquidation Engine / DB Worker / Batch Uploader
 
-```bash
-cd packages/prisma-client
-
-# Create new migration
-bunx prisma migrate dev --name migration_name
-
-# Apply migrations
-bunx prisma migrate deploy
-
-# Generate Prisma client
-bunx prisma generate
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6380
+DATABASE_URL=postgresql://postgres:password@localhost:5433/trading_db
 ```
 
-### Monitoring Redis Streams
+### Price Poller / Realtime Server
 
-```bash
-# Check stream length
-redis-cli -p 6380 XLEN request:stream
-redis-cli -p 6380 XLEN response:stream
-
-# View latest messages
-redis-cli -p 6380 XREVRANGE request:stream + - COUNT 10
-
-# Monitor pub/sub channels
-redis-cli -p 6380 PSUBSCRIBE market:*
-```
-
-### Useful Commands
-
-```bash
-# Check TimescaleDB candles
-psql -h localhost -U user -d trading
-SELECT * FROM candles_1m ORDER BY time DESC LIMIT 10;
-
-# Monitor engine snapshots
-SELECT timestamp, lastStreamId FROM snapshots ORDER BY timestamp DESC LIMIT 5;
-
-# Check closed orders
-SELECT userId, asset, "finalPnLInt", "closedAt" FROM closed_orders ORDER BY "closedAt" DESC;
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6380
 ```
 
 ---
 
 ## Architecture Decisions
 
-### Why BigInt?
-JavaScript's `Number` type has precision issues with large numbers and decimal calculations. BigInt ensures exact calculations for financial data.
-
-### Why Redis Streams?
-Redis Streams provide:
-- Message persistence (unlike Pub/Sub)
-- Event replay capability
-- Consumer groups for scalability
-- Guaranteed delivery
-
-### Why In-Memory Engine?
-- Ultra-low latency for price monitoring
-- Fast P&L calculations
-- Real-time liquidation detection
-- Snapshots + event replay for durability
-
-### Why TimescaleDB?
-- Optimized for time-series data
-- Efficient materialized views for candles
-- Better performance than regular PostgreSQL for charts
+| Decision | Rationale |
+|----------|-----------|
+| **BigInt (10^8 scale)** | JavaScript `Number` has floating-point precision issues. Financial calculations require exactness. |
+| **Redis Streams** | Durable message delivery with replay capability, unlike Pub/Sub. Consumer groups enable horizontal scaling. |
+| **In-memory engine** | Sub-millisecond order processing and liquidation detection on every price tick. Snapshots + replay provide durability. |
+| **TimescaleDB** | Purpose-built for time-series. Materialized views efficiently aggregate candles across 7 timeframes. |
+| **Stateless HTTP layer** | The API gateway does no state management — all order/balance state lives in the engine. Enables horizontal API scaling. |
+| **Ticket-based WebSocket auth** | One-time tickets (30s TTL) avoid sending JWTs over WebSocket URLs. More secure than query-string tokens. |
 
 ---
 
-## Performance Considerations
+## Performance
 
-- **Price Updates:** ~1000/second per asset (from Binance)
-- **Liquidation Checks:** Every price update for all open orders
-- **Snapshot Frequency:** 15 seconds (configurable)
-- **HTTP Timeout:** 10 seconds for engine requests
-- **WebSocket Broadcast:** Real-time to all connected clients
+| Metric | Value |
+|--------|-------|
+| Price ingestion | ~1,000 ticks/sec per asset |
+| Liquidation check | Every tick, all open orders |
+| Engine request timeout | 5 seconds |
+| Snapshot persistence | Every 15 seconds |
+| Batch insert size | 100 messages or 5s flush |
+| WebSocket broadcast | Real-time to all clients |
+
+---
+
+## Development
+
+### Database Migrations
+
+```bash
+cd packages/prisma-client
+bunx prisma migrate dev --name <migration_name>    # Create migration
+bunx prisma migrate deploy                          # Apply migrations
+bunx prisma generate                                # Regenerate client
+```
+
+### Monitoring
+
+```bash
+# Redis stream lengths
+redis-cli -p 6380 XLEN request:stream
+redis-cli -p 6380 XLEN response:stream
+
+# Live price feed
+redis-cli -p 6380 PSUBSCRIBE "market:*"
+
+# Recent candles
+psql -p 5433 -U postgres -d trading_db \
+  -c "SELECT * FROM candles_1m ORDER BY time DESC LIMIT 10;"
+
+# Closed orders
+psql -p 5433 -U postgres -d trading_db \
+  -c "SELECT asset, \"orderType\", \"finalPnLInt\", \"closeReason\" FROM closed_orders ORDER BY \"closedAt\" DESC LIMIT 10;"
+```
 
 ---
 
 ## License
 
 MIT
-
----
-
-## Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
