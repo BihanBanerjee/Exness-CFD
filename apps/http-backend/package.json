@@ -15,16 +15,17 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@exness/price-utils": "*",
+    "@exness/prisma-client": "*",
+    "@exness/redis-client": "*",
+    "@exness/redis-stream-types": "*",
+    "@exness/validation": "*",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "@exness/prisma-client": "*",
-    "@exness/redis-client": "*",
-    "@exness/redis-stream-types": "*",
-    "@exness/price-utils": "*",
-    "@exness/validation": "*"
+    "resend": "^6.9.3"
   },
   "scripts": {
     "start": "bun run index.ts"

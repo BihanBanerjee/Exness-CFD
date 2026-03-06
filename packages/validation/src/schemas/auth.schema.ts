@@ -27,6 +27,15 @@ export const signinSchema = z.object({
     .min(1, { message: "Password is required" })
 });
 
+// Magic link request body
+export const magicLinkSchema = z.object({
+  email: z.string()
+    .email({ message: "Invalid email address" })
+    .toLowerCase()
+    .trim(),
+});
+
 // Export inferred types
 export type SignupInput = z.infer<typeof signupSchema>;
 export type SigninInput = z.infer<typeof signinSchema>;
+export type MagicLinkInput = z.infer<typeof magicLinkSchema>;

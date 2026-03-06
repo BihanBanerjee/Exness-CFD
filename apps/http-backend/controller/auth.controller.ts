@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { prisma } from "@exness/prisma-client";
 import redisClient from "@exness/redis-client";
 import { engineClient } from "../services/engineClient";
+import { sendMagicLinkEmail } from "../utils/sendEmail";
 
 const generateToken = (userId: string) => {
     return jwt.sign({userId}, process.env.JWT_SECRET!, {expiresIn: "1d"}); // Here ! is a non-null assertion operator. It tells TS that this value is not null or undefined, trust me.
@@ -156,6 +157,54 @@ export const getMe = async (req: Request, res: Response) => {
         return res.json({ user });
     } catch {
         return res.status(401).json({ error: "Invalid token" });
+    }
+}
+
+export const sendMagicLink = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found. Please register first."
+            });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: "15m" });
+        await sendMagicLinkEmail(email, token);
+
+        return res.json({ message: "Magic link sent. Check your inbox." });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to send magic link" });
+    }
+}
+
+export const verifyMagicLink = async (req: Request, res: Response) => {
+    try {
+        const token = req.query.token as string;
+
+        if (!token) {
+            return res.status(400).json({ error: "Token is required" });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+
+        const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+
+        if (!user) {
+            return res.status(401).json({ error: "User not found" });
+        }
+
+        const authToken = generateToken(user.id);
+        setAuthCookie(res, authToken);
+
+        return res.redirect(302, `${process.env.FRONTEND_URL}/trade`);
+    } catch (error) {
+        console.error(error);
+        return res.status(401).json({ error: "Invalid or expired magic link" });
     }
 }
 
