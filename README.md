@@ -40,61 +40,11 @@ Velox enables users to trade cryptocurrencies (BTC, ETH, SOL) with up to 100x le
 
 ### System Overview
 
-```
-                          ┌─────────────────┐
-                          │   Binance API   │
-                          │   (WebSocket)   │
-                          └────────┬────────┘
-                                   │
-                          ┌────────▼────────┐
-                          │  PRICE POLLER   │
-                          │  ±0.1% spread   │
-                          └───┬─────────┬───┘
-                              │         │
-              Manipulated     │         │    Honest
-              prices          │         │    prices
-                              │         │
-         ┌────────────────────▼──┐   ┌──▼────────────────┐
-         │     Redis Stream      │   │   Redis Stream    │
-         │    (request:stream)   │   │ (batch:uploader)  │
-         └──────────┬────────────┘   └────────┬──────────┘
-                    │                         │
-         ┌──────────▼────────────┐   ┌────────▼──────────┐
-         │  LIQUIDATION ENGINE   │   │  BATCH UPLOADER   │
-         │  In-memory state      │   │  100-msg batches  │
-         │  Auto-liquidation     │   └────────┬──────────┘
-         │  Snapshots + replay   │            │
-         └──────────┬────────────┘            │
-                    │                         │
-         ┌──────────▼────────────┐   ┌────────▼──────────┐
-         │   Redis Response      │   │    TimescaleDB    │
-         │     Stream            │   │  Candle views     │
-         └──┬───────────────┬────┘   └───────────────────┘
-            │               │
-  ┌─────────▼──────┐  ┌────▼──────────┐
-  │  HTTP BACKEND  │  │   DB WORKER   │
-  │  Express API   │  │  Persist      │
-  │  Port 3005     │  │  closed orders│
-  └───────┬────────┘  └───────────────┘
-          │
-          │  REST + Cookies
-          │
-  ┌───────▼────────┐     ┌──────────────────┐
-  │   FRONTEND     │◄────│ REALTIME SERVER  │
-  │   Next.js      │ WS  │  Port 3006       │
-  │   Port 3000    │     │  Redis Pub/Sub   │
-  └────────────────┘     └──────────────────┘
-```
-
-### Request-Response Flow
-
-```
-Frontend  →  HTTP Backend  →  Redis Stream  →  Liquidation Engine
-                                                       │
-Frontend  ←  HTTP Backend  ←  Redis Subscriber  ←──────┘
-```
+![Velox System Architecture](assets/architecture.png)
 
 All order operations flow through Redis Streams. The HTTP backend is stateless — the liquidation engine is the single source of truth for balances and positions.
+
+**Request-Response Flow:** Frontend → HTTP Backend → Redis Stream → Liquidation Engine → Redis Response → HTTP Backend → Frontend
 
 ---
 
