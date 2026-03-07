@@ -410,7 +410,14 @@ export default function TradePage() {
       fetchBalance();
       fetchOrders();
     } catch (err: any) {
-      setOrderError(err.response?.data?.message || "Something went wrong");
+      const raw = err.response?.data?.error || err.response?.data?.message || "";
+      if (raw.includes("INSUFFICIENT_BALANCE")) {
+        setOrderError("Insufficient balance for this order");
+      } else if (raw.includes("ENGINE_NOT_READY")) {
+        setOrderError("Trading engine is starting up. Please try again shortly");
+      } else {
+        setOrderError(raw || "Something went wrong");
+      }
     } finally {
       setOrderLoading(false);
     }
@@ -439,7 +446,7 @@ export default function TradePage() {
     if (!livePrice) return 0;
     const entry = fromInt(order.executionPriceInt);
     const qty = fromInt(order.qtyInt);
-    const current = (livePrice.bidPrice + livePrice.askPrice) / 2;
+    const current = order.orderType === "LONG" ? livePrice.bidPrice : livePrice.askPrice;
     if (order.orderType === "LONG") return (current - entry) * qty;
     return (entry - current) * qty;
   };
@@ -686,7 +693,7 @@ export default function TradePage() {
                 orders.map((o) => {
                   const pnl = computePnL(o);
                   const livePrice = prices[o.asset];
-                  const currentMid = livePrice ? ((livePrice.bidPrice + livePrice.askPrice) / 2).toFixed(2) : "—";
+                  const currentDisplay = livePrice ? (o.orderType === "LONG" ? livePrice.bidPrice : livePrice.askPrice).toFixed(2) : "—";
                   const assetLabel = o.asset.replace("USDT", "");
                   const sl = o.stopLossInt && o.stopLossInt !== "0" ? fromInt(o.stopLossInt) : null;
                   const tp = o.takeProfitInt && o.takeProfitInt !== "0" ? fromInt(o.takeProfitInt) : null;
@@ -704,7 +711,7 @@ export default function TradePage() {
                       </div>
                       <div className="flex-1 min-w-[80px] text-right text-trade-text">{fromInt(o.qtyInt).toFixed(8)}</div>
                       <div className="flex-[1.1] min-w-[90px] text-right text-trade-muted font-mono">{parseFloat(o.executionPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                      <div className="flex-[1.1] min-w-[90px] text-right text-trade-text font-mono">{currentMid !== "—" ? parseFloat(currentMid).toLocaleString(undefined, { minimumFractionDigits: 2 }) : "—"}</div>
+                      <div className="flex-[1.1] min-w-[90px] text-right text-trade-text font-mono">{currentDisplay !== "—" ? parseFloat(currentDisplay).toLocaleString(undefined, { minimumFractionDigits: 2 }) : "—"}</div>
                       <div className={`flex-1 min-w-[80px] text-right font-mono ${sl ? "text-bear" : "text-trade-dim"}`}>{sl ? sl.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "—"}</div>
                       <div className={`flex-1 min-w-[80px] text-right font-mono ${tp ? "text-bull" : "text-trade-dim"}`}>{tp ? tp.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "—"}</div>
                       <div className={`flex-1 min-w-[80px] text-right font-semibold font-mono ${pnl >= 0 ? "text-bull" : "text-bear"}`}>
@@ -830,7 +837,7 @@ export default function TradePage() {
 
           {/* Volume */}
           <div className="mb-4">
-            <label className="text-[11px] text-trade-muted block mb-1.5">Volume (USD)</label>
+            <label className="text-[11px] text-trade-muted block mb-1.5">Volume (units)</label>
             <input
               type="number"
               value={qty}
