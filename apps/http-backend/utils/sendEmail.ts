@@ -6,7 +6,7 @@ export async function sendMagicLinkEmail(email: string, token: string) {
     const magicLinkUrl = `${process.env.API_BASE_URL}/api/v1/user/auth/verify?token=${token}`;
 
     await resend.emails.send({
-        from: "Velox <onboarding@resend.dev>",
+        from: "Velox <noreply@mail.bihanbanerjee.com>",
         to: email,
         subject: "Sign in to Velox",
         html: `
