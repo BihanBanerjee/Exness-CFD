@@ -34,6 +34,8 @@ Velox enables users to trade cryptocurrencies (BTC, ETH, SOL) with up to 100x le
 | Initial balance | $1,000 (virtual) |
 | Candle timeframes | 30s, 1m, 5m, 15m, 1h, 4h, 1d |
 
+![Velox Trading UI](assets/velox-preview.png)
+
 ---
 
 ## Architecture
